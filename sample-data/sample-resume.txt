@@ -1,0 +1,31 @@
+JANE DOE
+Chicago, IL
+jane.doe@example.com | (312) 555-0148 | linkedin.com/in/janedoe | github.com/janedoe
+
+SUMMARY
+Senior software engineer with experience building backend services for healthcare workflows. Comfortable working across API design, service delivery, and cross-functional collaboration.
+
+SKILLS
+Python, FastAPI, Docker, REST APIs, SQL, Git
+
+EXPERIENCE
+Acme Health
+Senior Software Engineer | Jan 2022 - Present
+- Built backend services for healthcare workflows
+- Collaborated with product teams on service requirements
+- Implemented API integrations for internal tools
+
+Northwind Labs
+Software Engineer | Jun 2019 - Dec 2021
+- Developed internal applications in Python
+- Supported API and service maintenance
+
+EDUCATION
+State University | B.S. Computer Science | 2015 - 2019
+
+PROJECTS
+CV Copilot
+- Built a resume analysis application prototype with FastAPI
+
+CERTIFICATIONS
+AWS Cloud Practitioner
