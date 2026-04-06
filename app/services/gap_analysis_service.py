@@ -1,10 +1,9 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.schemas.analysis import AnalyzeResponse
 from app.schemas.parse import (
     JobDescriptionParseResponse,
-    ProjectItem,
     ResumeParseResponse,
     WorkExperienceItem,
 )
@@ -68,6 +67,80 @@ INDUSTRY_ALIASES = {
     "consulting": ("consulting",),
     "biotech": ("biotech", "biotechnology"),
     "nonprofit": ("nonprofit", "non-profit"),
+    "SaaS": ("saas", "software as a service"),
+}
+CONCEPT_BUCKETS = {
+    "automation": {
+        "automation",
+        "automate",
+        "automated",
+        "streamline",
+        "streamlined",
+        "efficiency",
+        "productivity",
+        "manual work",
+        "manual process",
+        "manual processes",
+        "eliminate manual work",
+        "reduce manual work",
+    },
+    "workflow": {
+        "workflow",
+        "workflows",
+        "process",
+        "processes",
+        "pipeline",
+        "pipelines",
+    },
+    "ai": {
+        "ai",
+        "ai enabled",
+        "ai-enabled",
+        "llm",
+        "llms",
+        "machine learning",
+        "chatgpt",
+        "gemini",
+        "internal ai tool",
+        "model",
+        "models",
+    },
+    "cross_functional": {
+        "cross functional",
+        "cross-functional",
+        "partner",
+        "partners",
+        "collaborate",
+        "collaboration",
+        "product teams",
+        "business teams",
+        "frontline teams",
+        "stakeholders",
+        "stakeholder",
+        "team",
+        "teams",
+    },
+    "business_software": {
+        "software",
+        "platform",
+        "platforms",
+        "api",
+        "apis",
+        "backend",
+        "internal tools",
+        "tool",
+        "tools",
+        "system",
+        "systems",
+        "salesforce",
+        "zendesk",
+        "gainsight",
+        "workflow platform",
+    },
+}
+ADJACENT_DOMAIN_CONCEPTS = {
+    "SaaS": {"business_software", "automation", "workflow"},
+    "technology": {"business_software", "automation", "workflow"},
 }
 
 
@@ -82,6 +155,9 @@ class MatchEvidence:
     target: str
     evidence: str
     label: str
+    support_level: str = "full"
+    matched_concepts: tuple[str, ...] = field(default_factory=tuple)
+    score: float = 0.0
 
 
 def analyze_gap(
@@ -127,30 +203,30 @@ def analyze_gap(
             _format_missing_skill_gaps("preferred skill", missing_preferred, limit=2)
         )
 
-    matched_responsibilities, unmatched_responsibilities = _match_responsibilities(
+    full_responsibilities, partial_responsibilities, missing_responsibilities = _match_responsibilities(
         job.responsibilities,
         resume_evidence,
     )
     if job.responsibilities:
-        ratio = len(matched_responsibilities) / len(job.responsibilities)
+        ratio = (
+            len(full_responsibilities) + (0.5 * len(partial_responsibilities))
+        ) / len(job.responsibilities)
         available_weight += WEIGHTS["experience_relevance"]
         weighted_score += WEIGHTS["experience_relevance"] * ratio
         evidence_notes.append(
-            "Experience relevance: matched "
-            f"{len(matched_responsibilities)} of {len(job.responsibilities)} job responsibilities."
+            "Experience relevance: "
+            f"{len(full_responsibilities)} fully supported, "
+            f"{len(partial_responsibilities)} partially supported, "
+            f"{len(missing_responsibilities)} not evidenced."
         )
         strengths.extend(
-            _format_responsibility_strengths(matched_responsibilities, limit=3)
-        )
-        gaps.extend(
-            _format_responsibility_gaps(unmatched_responsibilities, limit=3)
+            _format_responsibility_strengths(full_responsibilities, limit=3)
         )
         under_emphasized_experience.extend(
-            _find_under_emphasized_experience(
-                matched_responsibilities,
-                resume,
-                limit=3,
-            )
+            _format_under_emphasized_experience(partial_responsibilities, limit=4)
+        )
+        gaps.extend(
+            _format_responsibility_gaps(missing_responsibilities, limit=3)
         )
 
     seniority_result = _analyze_seniority_alignment(resume, job)
@@ -286,24 +362,21 @@ def _match_terms(
 def _match_responsibilities(
     responsibilities: list[str],
     evidence_items: list[ResumeEvidence],
-) -> tuple[list[MatchEvidence], list[str]]:
-    matched: list[MatchEvidence] = []
+) -> tuple[list[MatchEvidence], list[MatchEvidence], list[str]]:
+    full_matches: list[MatchEvidence] = []
+    partial_matches: list[MatchEvidence] = []
     missing: list[str] = []
 
     for responsibility in responsibilities:
         evidence = _find_responsibility_evidence(responsibility, evidence_items)
-        if evidence:
-            matched.append(
-                MatchEvidence(
-                    target=responsibility,
-                    evidence=evidence.text,
-                    label=evidence.label,
-                )
-            )
-        else:
+        if evidence is None:
             missing.append(responsibility)
+        elif evidence.support_level == "full":
+            full_matches.append(evidence)
+        else:
+            partial_matches.append(evidence)
 
-    return matched, missing
+    return full_matches, partial_matches, missing
 
 
 def _find_term_evidence(term: str, evidence_items: list[ResumeEvidence]) -> ResumeEvidence | None:
@@ -330,21 +403,66 @@ def _find_term_evidence(term: str, evidence_items: list[ResumeEvidence]) -> Resu
 def _find_responsibility_evidence(
     responsibility: str,
     evidence_items: list[ResumeEvidence],
-) -> ResumeEvidence | None:
-    target_tokens = _meaningful_tokens(responsibility)
-    if not target_tokens:
-        return None
-
-    best_match: ResumeEvidence | None = None
-    best_overlap = 0
+) -> MatchEvidence | None:
+    best_match: MatchEvidence | None = None
     for evidence in evidence_items:
-        overlap = len(target_tokens & _meaningful_tokens(evidence.text))
-        threshold = 1 if len(target_tokens) <= 2 else 2
-        if overlap >= threshold and overlap > best_overlap:
-            best_match = evidence
-            best_overlap = overlap
+        candidate = _score_responsibility_match(responsibility, evidence)
+        if candidate is None:
+            continue
+        if best_match is None or candidate.score > best_match.score:
+            best_match = candidate
 
     return best_match
+
+
+def _score_responsibility_match(
+    responsibility: str,
+    evidence: ResumeEvidence,
+) -> MatchEvidence | None:
+    responsibility_tokens = _meaningful_tokens(responsibility)
+    evidence_tokens = _meaningful_tokens(evidence.text)
+    if not responsibility_tokens or not evidence_tokens:
+        return None
+
+    lexical_overlap = responsibility_tokens & evidence_tokens
+    lexical_coverage = len(lexical_overlap) / len(responsibility_tokens)
+    responsibility_concepts = _extract_concepts(responsibility)
+    evidence_concepts = _extract_concepts(evidence.text)
+    concept_overlap = sorted(responsibility_concepts & evidence_concepts)
+    exact_phrase_match = _normalize_text(responsibility) in _normalize_text(evidence.text)
+    verb_match = _leading_action_token(responsibility) == _leading_action_token(evidence.text)
+
+    support_level: str | None = None
+    if exact_phrase_match or lexical_coverage >= 0.75:
+        support_level = "full"
+    elif (
+        len(responsibility_tokens) <= 3
+        and lexical_coverage >= 0.66
+        and verb_match
+    ):
+        support_level = "full"
+    elif lexical_coverage >= 0.34 or concept_overlap or verb_match:
+        support_level = "partial"
+
+    if support_level is None:
+        return None
+
+    score = lexical_coverage + (0.18 * len(concept_overlap))
+    if exact_phrase_match:
+        score += 1.0
+    if verb_match:
+        score += 0.1
+    if support_level == "full":
+        score += 0.2
+
+    return MatchEvidence(
+        target=responsibility,
+        evidence=evidence.text,
+        label=evidence.label,
+        support_level=support_level,
+        matched_concepts=tuple(concept_overlap),
+        score=score,
+    )
 
 
 def _analyze_seniority_alignment(
@@ -416,7 +534,7 @@ def _analyze_domain_fit(
 
     aliases = INDUSTRY_ALIASES.get(industry, (industry,))
     for alias in aliases:
-        evidence = _find_term_evidence(alias, evidence_items)
+        evidence = _find_explicit_alias_evidence(alias, evidence_items)
         if evidence:
             return {
                 "applicable": True,
@@ -426,10 +544,23 @@ def _analyze_domain_fit(
                 "gap": None,
             }
 
+    adjacent_evidence = _find_adjacent_domain_evidence(industry, evidence_items)
+    if adjacent_evidence:
+        return {
+            "applicable": True,
+            "ratio": 0.5,
+            "note": f"Domain fit: found adjacent business-software evidence in {adjacent_evidence.label}.",
+            "strength": (
+                f"Resume shows adjacent domain evidence for '{industry}' through "
+                f"{adjacent_evidence.label}: '{adjacent_evidence.text}'."
+            ),
+            "gap": None,
+        }
+
     return {
         "applicable": True,
         "ratio": 0.0,
-        "note": f"Domain fit: JD industry is '{industry}', but no explicit industry terms were found in the resume.",
+        "note": f"Domain fit: JD industry is '{industry}', but no explicit or adjacent industry terms were found in the resume.",
         "strength": None,
         "gap": f"JD industry is '{industry}', but the resume does not explicitly mention {industry}-related work.",
     }
@@ -492,31 +623,19 @@ def _compute_missing_keywords(
     return missing_keywords
 
 
-def _find_under_emphasized_experience(
-    matched_responsibilities: list[MatchEvidence],
-    resume: ResumeParseResponse,
+def _format_under_emphasized_experience(
+    matches: list[MatchEvidence],
     limit: int,
 ) -> list[str]:
-    explicit_skill_terms = {skill.lower() for skill in resume.skills}
     notes: list[str] = []
 
-    for match in matched_responsibilities:
-        evidence_lower = match.evidence.lower()
-        target_lower = match.target.lower()
-        if target_lower in evidence_lower:
-            continue
-
-        if match.label.startswith(("work bullet", "project bullet", "project ")):
-            responsibility_tokens = _meaningful_tokens(match.target)
-            missing_explicit_terms = [
-                token for token in responsibility_tokens if token not in explicit_skill_terms
-            ]
-            if missing_explicit_terms:
-                notes.append(
-                    f"{match.label.capitalize()} '{match.evidence}' supports JD responsibility '{match.target}', but the resume does not state the JD wording explicitly."
-                )
-        if len(notes) >= limit:
-            break
+    for match in matches[:limit]:
+        concept_text = ""
+        if match.matched_concepts:
+            concept_text = " through related concepts such as " + ", ".join(match.matched_concepts)
+        notes.append(
+            f"Resume evidence '{match.evidence}' in {match.label} is relevant to JD responsibility '{match.target}'{concept_text}, but the resume could state that connection more directly."
+        )
 
     return notes
 
@@ -548,7 +667,7 @@ def _format_responsibility_strengths(
     limit: int,
 ) -> list[str]:
     return [
-        f"Resume evidence '{item.evidence}' in {item.label} aligns with the JD responsibility '{item.target}'."
+        f"Resume evidence '{item.evidence}' in {item.label} directly supports the JD responsibility '{item.target}'."
         for item in matches[:limit]
     ]
 
@@ -563,16 +682,78 @@ def _format_responsibility_gaps(
     ]
 
 
+def _find_adjacent_domain_evidence(
+    industry: str,
+    evidence_items: list[ResumeEvidence],
+) -> ResumeEvidence | None:
+    target_concepts = ADJACENT_DOMAIN_CONCEPTS.get(industry)
+    if not target_concepts:
+        return None
+
+    best_match: ResumeEvidence | None = None
+    best_score = 0
+    for evidence in evidence_items:
+        evidence_concepts = _extract_concepts(evidence.text)
+        overlap = len(target_concepts & evidence_concepts)
+        if overlap > best_score:
+            best_match = evidence
+            best_score = overlap
+
+    return best_match if best_score >= 1 else None
+
+
+def _find_explicit_alias_evidence(
+    alias: str,
+    evidence_items: list[ResumeEvidence],
+) -> ResumeEvidence | None:
+    normalized_alias = _normalize_text(alias)
+    for evidence in evidence_items:
+        normalized_evidence = _normalize_text(evidence.text)
+        if normalized_alias and normalized_alias in normalized_evidence:
+            return evidence
+    return None
+
+
+def _extract_concepts(text: str) -> set[str]:
+    normalized = _normalize_text(text)
+    tokens = set(normalized.split())
+    concepts: set[str] = set()
+
+    for concept, phrases in CONCEPT_BUCKETS.items():
+        for phrase in phrases:
+            normalized_phrase = _normalize_text(phrase)
+            phrase_tokens = set(normalized_phrase.split())
+            if not phrase_tokens:
+                continue
+            if len(phrase_tokens) == 1 and next(iter(phrase_tokens)) in tokens:
+                concepts.add(concept)
+                break
+            if normalized_phrase in normalized:
+                concepts.add(concept)
+                break
+
+    return concepts
+
+
+def _leading_action_token(text: str) -> str | None:
+    tokens = _ordered_meaningful_tokens(text)
+    return tokens[0] if tokens else None
+
+
 def _normalize_text(text: str) -> str:
     return re.sub(r"[^a-z0-9+#]+", " ", text.lower()).strip()
 
 
-def _meaningful_tokens(text: str) -> set[str]:
-    return {
+def _ordered_meaningful_tokens(text: str) -> list[str]:
+    return [
         _normalize_token(token)
         for token in _normalize_text(text).split()
         if token not in STOP_WORDS and len(token) > 2
-    }
+    ]
+
+
+def _meaningful_tokens(text: str) -> set[str]:
+    return set(_ordered_meaningful_tokens(text))
 
 
 def _dedupe_preserve_order(items: list[str]) -> list[str]:
@@ -592,6 +773,8 @@ def _dedupe_preserve_order(items: list[str]) -> list[str]:
 
 def _normalize_token(token: str) -> str:
     irregular_forms = {
+        "automation": "automate",
+        "automated": "automate",
         "built": "build",
         "building": "build",
         "maintained": "maintain",
@@ -600,6 +783,10 @@ def _normalize_token(token: str) -> str:
         "collaborating": "collaborate",
         "designed": "design",
         "designing": "design",
+        "processes": "process",
+        "pipelines": "pipeline",
+        "workflows": "workflow",
+        "teams": "team",
     }
     if token in irregular_forms:
         return irregular_forms[token]
