@@ -2,6 +2,11 @@
 
 import { useMemo, useState } from "react";
 
+import {
+  analyzeRoleFit,
+  parseJobDescription,
+  parseResumeFile
+} from "../lib/api";
 import { buildMockResponse } from "../lib/mock-analysis";
 import { sampleJobDescription } from "../lib/mock-data";
 
@@ -122,11 +127,16 @@ function MetricTile({ label, value, helper }) {
 
 
 export default function HomePage() {
+  const [resumeFile, setResumeFile] = useState(null);
   const [resumeFileName, setResumeFileName] = useState("");
   const [jobDescription, setJobDescription] = useState(sampleJobDescription);
   const [results, setResults] = useState(() =>
     buildMockResponse({ resumeFileName: "", jobDescription: sampleJobDescription })
   );
+  const [analysisMode, setAnalysisMode] = useState("preview");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [statusLabel, setStatusLabel] = useState("Analysis preview ready");
 
   const scoreStyles = useMemo(
@@ -134,15 +144,72 @@ export default function HomePage() {
     [results.match_score]
   );
 
-  const handleAnalyze = () => {
-    setResults(buildMockResponse({ resumeFileName, jobDescription }));
-    setStatusLabel("Analysis preview updated");
+  const handleAnalyze = async () => {
+    const trimmedJobDescription = jobDescription.trim();
+
+    if (!trimmedJobDescription) {
+      setAnalysisMode("preview");
+      setErrorMessage("Paste a job description to generate analysis.");
+      setResults(buildMockResponse({ resumeFileName, jobDescription: "" }));
+      setStatusLabel("Job description needed");
+      return;
+    }
+
+    if (!resumeFile) {
+      setAnalysisMode("preview");
+      setErrorMessage(
+        "Upload a PDF or DOCX resume to run live analysis. Showing preview mode until a file is selected."
+      );
+      setResults(buildMockResponse({ resumeFileName, jobDescription: trimmedJobDescription }));
+      setStatusLabel("Resume needed for live analysis");
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setErrorMessage("");
+
+    try {
+      const [parsedResume, parsedJob] = await Promise.all([
+        parseResumeFile(resumeFile),
+        parseJobDescription(trimmedJobDescription)
+      ]);
+      const liveResults = await analyzeRoleFit({
+        parsedResume,
+        parsedJobDescription: parsedJob
+      });
+
+      setResults(liveResults);
+      setAnalysisMode("live");
+      setStatusLabel(
+        parsedResume.name
+          ? `Live analysis ready for ${parsedResume.name}`
+          : "Live analysis ready"
+      );
+    } catch (error) {
+      setResults(
+        buildMockResponse({
+          resumeFileName,
+          jobDescription: trimmedJobDescription
+        })
+      );
+      setAnalysisMode("preview");
+      setErrorMessage(
+        `Live analysis could not be completed. ${error.message}`
+      );
+      setStatusLabel("Backend unavailable, showing preview");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleReset = () => {
+    setResumeFile(null);
     setResumeFileName("");
+    setFileInputKey((currentValue) => currentValue + 1);
     setJobDescription(sampleJobDescription);
     setResults(buildMockResponse({ resumeFileName: "", jobDescription: sampleJobDescription }));
+    setAnalysisMode("preview");
+    setErrorMessage("");
     setStatusLabel("Analysis preview ready");
   };
 
@@ -160,7 +227,7 @@ export default function HomePage() {
                 Compare a resume against a target role with clear, structured guidance.
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-[color:var(--muted)]">
-                Upload a resume, paste the job description, and review match score, strengths, gaps, missing keywords, and under-emphasized experience in one workspace. The current preview uses mock data aligned to the <code>/analyze</code> response so the interface is ready for live backend wiring.
+                Upload a resume, paste the job description, and review match score, strengths, gaps, missing keywords, and under-emphasized experience in one workspace. When the backend is available, the page parses the uploaded file and runs live analysis; otherwise it falls back to preview mode.
               </p>
             </div>
 
@@ -181,8 +248,14 @@ export default function HomePage() {
                   Resume upload and role brief
                 </h2>
               </div>
-              <div className="rounded-full bg-[color:var(--accent-soft)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--accent)]">
-                Mock mode
+              <div
+                className={`rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] ${
+                  analysisMode === "live"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-[color:var(--accent-soft)] text-[color:var(--accent)]"
+                }`}
+              >
+                {analysisMode === "live" ? "Live backend" : "Preview mode"}
               </div>
             </div>
 
@@ -192,7 +265,7 @@ export default function HomePage() {
                   Resume upload
                 </label>
                 <p className="mt-1 text-sm leading-6 text-[color:var(--muted)]">
-                  Select a PDF or DOCX resume. The current page stores the filename locally and uses mock analysis data until end-to-end wiring is added.
+                  Select a PDF or DOCX resume. CV Copilot will send the uploaded file to the backend for parsing when live analysis runs.
                 </p>
 
                 <label className="mt-4 flex cursor-pointer items-center justify-between gap-4 rounded-[24px] bg-[color:var(--surface-soft)] px-4 py-4 transition hover:bg-white">
@@ -210,12 +283,15 @@ export default function HomePage() {
                   </span>
 
                   <input
+                    key={fileInputKey}
                     className="hidden"
                     type="file"
                     accept=".pdf,.doc,.docx"
                     onChange={(event) => {
                       const file = event.target.files?.[0];
+                      setResumeFile(file || null);
                       setResumeFileName(file ? file.name : "");
+                      setErrorMessage("");
                     }}
                   />
                 </label>
@@ -229,7 +305,7 @@ export default function HomePage() {
                   Job description
                 </label>
                 <p className="mt-1 text-sm leading-6 text-[color:var(--muted)]">
-                  Paste the target posting to preview how the current analysis service would frame strengths, gaps, keywords, and under-emphasized experience.
+                  Paste the target posting. The app will parse it and compare it against the uploaded resume during live analysis.
                 </p>
                 <textarea
                   id="job-description"
@@ -240,24 +316,32 @@ export default function HomePage() {
               </div>
 
               <div className="rounded-[28px] border border-[color:var(--border)] bg-[color:var(--surface-soft)] px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
-                The right panel is designed against the current backend response shape:
+                Live analysis uses the current backend response shape:
                 <span className="mt-2 block font-mono text-xs text-[color:var(--foreground)]">
                   match_score, strengths, gaps, missing_keywords, under_emphasized_experience, evidence_notes
                 </span>
               </div>
 
+              {errorMessage ? (
+                <div className="rounded-[28px] border border-[color:var(--danger-soft)] bg-[color:var(--danger-soft)] px-4 py-4 text-sm leading-6 text-[color:var(--danger)]">
+                  {errorMessage}
+                </div>
+              ) : null}
+
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button
-                  className="inline-flex items-center justify-center rounded-full bg-[color:var(--foreground)] px-5 py-3 text-sm font-semibold tracking-[0.14em] text-white transition hover:-translate-y-0.5 hover:bg-[#101827]"
+                  className="inline-flex items-center justify-center rounded-full bg-[color:var(--foreground)] px-5 py-3 text-sm font-semibold tracking-[0.14em] text-white transition hover:-translate-y-0.5 hover:bg-[#101827] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
                   onClick={handleAnalyze}
                   type="button"
+                  disabled={isAnalyzing}
                 >
-                  Analyze role fit
+                  {isAnalyzing ? "Analyzing..." : "Analyze role fit"}
                 </button>
                 <button
-                  className="inline-flex items-center justify-center rounded-full border border-[color:var(--border-strong)] bg-white px-5 py-3 text-sm font-semibold tracking-[0.14em] text-[color:var(--foreground)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
+                  className="inline-flex items-center justify-center rounded-full border border-[color:var(--border-strong)] bg-white px-5 py-3 text-sm font-semibold tracking-[0.14em] text-[color:var(--foreground)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={handleReset}
                   type="button"
+                  disabled={isAnalyzing}
                 >
                   Reset preview
                 </button>
