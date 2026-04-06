@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 
-import { mockAnalysisResults, sampleJobDescription } from "../lib/mock-data";
+import { buildMockResponse } from "../lib/mock-analysis";
+import { sampleJobDescription } from "../lib/mock-data";
 
 
 const scoreTone = (score) => {
@@ -120,57 +121,13 @@ function MetricTile({ label, value, helper }) {
 }
 
 
-const buildMockResponse = ({ resumeFileName, jobDescription }) => {
-  const normalizedDescription = jobDescription.trim().toLowerCase();
-  const missingKeywords = [...mockAnalysisResults.missing_keywords];
-  const evidenceNotes = [...mockAnalysisResults.evidence_notes];
-  const strengths = [...mockAnalysisResults.strengths];
-  const gaps = [...mockAnalysisResults.gaps];
-  const underEmphasized = [...mockAnalysisResults.under_emphasized_experience];
-
-  if (resumeFileName) {
-    evidenceNotes.unshift(`Resume source loaded for preview: ${resumeFileName}.`);
-  } else {
-    evidenceNotes.unshift("Resume upload is still in mock mode, so file parsing is not yet connected to this page.");
-  }
-
-  if (!normalizedDescription.includes("saas")) {
-    const filteredKeywords = missingKeywords.filter((keyword) => keyword !== "SaaS");
-    return {
-      ...mockAnalysisResults,
-      match_score: 74,
-      missing_keywords: filteredKeywords,
-      strengths,
-      gaps,
-      under_emphasized_experience: underEmphasized,
-      evidence_notes: evidenceNotes
-    };
-  }
-
-  if (normalizedDescription.includes("zendesk") || normalizedDescription.includes("gainsight")) {
-    gaps[0] = "The resume does not explicitly mention one or more customer operations platforms named in the job description.";
-  }
-
-  if (normalizedDescription.includes("workato") || normalizedDescription.includes("make")) {
-    evidenceNotes.push("Tooling note: the JD references workflow-automation platforms that are not yet named directly in the resume.");
-  }
-
-  return {
-    ...mockAnalysisResults,
-    strengths,
-    gaps,
-    missing_keywords: missingKeywords,
-    under_emphasized_experience: underEmphasized,
-    evidence_notes: evidenceNotes
-  };
-};
-
-
 export default function HomePage() {
   const [resumeFileName, setResumeFileName] = useState("");
   const [jobDescription, setJobDescription] = useState(sampleJobDescription);
-  const [results, setResults] = useState(mockAnalysisResults);
-  const [statusLabel, setStatusLabel] = useState("Previewing structured mock analysis");
+  const [results, setResults] = useState(() =>
+    buildMockResponse({ resumeFileName: "", jobDescription: sampleJobDescription })
+  );
+  const [statusLabel, setStatusLabel] = useState("Analysis preview ready");
 
   const scoreStyles = useMemo(
     () => scoreTone(results.match_score),
@@ -179,14 +136,14 @@ export default function HomePage() {
 
   const handleAnalyze = () => {
     setResults(buildMockResponse({ resumeFileName, jobDescription }));
-    setStatusLabel("Mock analysis refreshed from the current form state");
+    setStatusLabel("Analysis preview updated");
   };
 
   const handleReset = () => {
     setResumeFileName("");
     setJobDescription(sampleJobDescription);
-    setResults(mockAnalysisResults);
-    setStatusLabel("Previewing structured mock analysis");
+    setResults(buildMockResponse({ resumeFileName: "", jobDescription: sampleJobDescription }));
+    setStatusLabel("Analysis preview ready");
   };
 
   return (
@@ -200,10 +157,10 @@ export default function HomePage() {
                 CV Copilot
               </p>
               <h1 className="mt-3 text-4xl font-semibold tracking-tight text-[color:var(--foreground)] md:text-5xl">
-                Review resume fit like a real hiring workflow, not a raw JSON dump.
+                Compare a resume against a target role with clear, structured guidance.
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-[color:var(--muted)]">
-                This single-page workspace keeps the inputs on the left and a product-style analysis surface on the right, using structured mock data aligned to the current <code>/analyze</code> response.
+                Upload a resume, paste the job description, and review match score, strengths, gaps, missing keywords, and under-emphasized experience in one workspace. The current preview uses mock data aligned to the <code>/analyze</code> response so the interface is ready for live backend wiring.
               </p>
             </div>
 
