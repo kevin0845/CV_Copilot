@@ -2,3 +2,5 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+frontend/.next/
+frontend/node_modules/

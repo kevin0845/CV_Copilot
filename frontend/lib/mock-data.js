@@ -1,58 +1,46 @@
-export const mockResults = {
-  matchScore: 82,
+export const mockAnalysisResults = {
+  match_score: 78,
   strengths: [
-    "Resume shows strong overlap with the target backend stack through Python, FastAPI, and Docker.",
-    "Healthcare experience is already present in the summary and work history, which supports the domain fit.",
-    "Senior-level title evidence aligns well with the target role's seniority."
+    "Resume shows direct automation experience through process improvement work and API-based internal tooling.",
+    "The candidate has explicit AI exposure, which supports the role's AI-enabled workflow focus.",
+    "Cross-functional collaboration is already present through work with operations and business teams."
   ],
   gaps: [
-    "PostgreSQL is requested in the JD but is not called out explicitly in the resume.",
-    "Infrastructure tooling such as Terraform is missing from the resume language.",
-    "One work bullet implies cross-functional collaboration, but it could be stated more directly."
+    "The resume does not explicitly mention customer operations platforms such as Gainsight or Zendesk.",
+    "No direct evidence was found for workflow-automation vendors like Workato or Make."
   ],
-  missingKeywords: ["PostgreSQL", "Terraform", "REST APIs"],
-  tailoredSummary:
-    "Senior Software Engineer with experience building healthcare-focused backend services using Python, FastAPI, and Docker, with cross-functional collaboration across product and engineering teams.",
-  rewriteSuggestions: [
-    {
-      original: "Built backend services for healthcare workflows",
-      suggested:
-        "Built backend services for healthcare workflows using Python and FastAPI.",
-      rationale:
-        "Adds already-supported technical context from the skills section to better align the bullet with the target backend role."
-    },
-    {
-      original: "Collaborated with product teams",
-      suggested:
-        "Collaborated with product teams to shape backend service requirements and delivery.",
-      rationale:
-        "Makes the collaboration more specific to backend work without inventing outcomes or new stakeholders."
-    },
-    {
-      original: "Docker, Python, FastAPI",
-      suggested: "Python, FastAPI, Docker",
-      rationale:
-        "Surfaces the most relevant role-aligned skills first for faster recruiter scanning."
-    }
+  missing_keywords: ["Workato", "Gainsight", "Zendesk", "SaaS"],
+  under_emphasized_experience: [
+    "Resume evidence 'Automated manual business processes for operations teams' supports workflow automation and eliminating manual work, but the connection could be stated more directly.",
+    "Resume evidence 'Developed an internal AI tool for support workflows' is relevant to AI-enabled workflows and piloting AI solutions, even though it does not mirror the JD wording exactly."
+  ],
+  evidence_notes: [
+    "Skills alignment: matched Python, SQL, Salesforce, REST APIs, and automation-related experience; missing explicit evidence for Workato and Gainsight.",
+    "Experience relevance: one responsibility is directly supported, two are partially supported through related concepts, and one remains unproven.",
+    "Domain fit: resume shows adjacent business-software evidence through internal tools, API integrations, and operations-facing process work."
   ]
 };
 
-export const sampleJobDescription = `Senior Backend Engineer
+export const sampleJobDescription = `Customer Operations AI & Automation Lead
 
-We are looking for a backend engineer to build and maintain API services for a healthcare workflow platform.
+Optro is hiring a builder who can identify automation opportunities, design AI-enabled workflows, and partner with frontline teams to eliminate manual work.
 
-Responsibilities
-- Build and maintain FastAPI services
-- Collaborate with product and design
-- Improve service reliability and API quality
+Key Responsibilities
+- Identify automation opportunities across customer operations
+- Design AI-enabled workflows and internal process improvements
+- Partner with frontline and business teams to reduce manual work
+- Pilot third-party AI and workflow automation solutions
 
 Requirements
 - Python
-- FastAPI
-- PostgreSQL
+- SQL
+- Salesforce
 - REST APIs
+- JSON
+- webhooks
 
 Preferred Qualifications
-- Docker
-- Terraform
-- Healthcare experience`;
+- Workato
+- Gainsight
+- Zendesk
+- SaaS experience`;

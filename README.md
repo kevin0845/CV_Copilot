@@ -1,22 +1,25 @@
 # CV Copilot
 
-CV Copilot is a resume-tailoring workspace that helps compare a candidate resume against a target job description, surface role-fit gaps, and generate faithful rewrite suggestions. The project currently includes a FastAPI backend for parsing and analysis plus a Next.js frontend with a clean single-page mock UI.
+CV Copilot is a resume-tailoring workspace built to help candidates compare their resume against a target job description, understand where the fit is strong or weak, and improve wording without inventing experience. The project currently includes a FastAPI backend for parsing and analysis plus a Next.js + Tailwind frontend with a polished single-page mock interface.
 
 ## Project Overview
 
-The goal of CV Copilot is to turn unstructured resume and job description text into structured, explainable guidance:
+CV Copilot turns unstructured resume files and job description text into structured, explainable guidance:
 
-- Parse resume uploads from PDF or DOCX into normalized text and structured JSON
-- Parse raw job descriptions into deterministic structured fields
-- Run explainable gap analysis across skills, experience relevance, seniority, and domain fit
-- Generate rewrite suggestions that stay faithful to the candidate's existing experience
-- Provide a frontend workspace for upload, job input, and analysis review
+- Parse PDF and DOCX resumes into normalized plain text
+- Convert resume text into structured JSON
+- Parse job descriptions into deterministic structured fields
+- Run rule-based gap analysis across skills, responsibilities, seniority, and domain fit
+- Surface under-emphasized experience when the resume is relevant but phrased differently
+- Generate rewrite suggestions that stay faithful to the candidate's existing background
 
 ## Features
 
-- FastAPI backend with modular `api`, `services`, and `schemas` packages
-- Resume file parsing with `pypdf` and `python-docx`
-- Structured resume parsing for:
+### Backend
+
+- FastAPI app organized into `app/api`, `app/services`, and `app/schemas`
+- Resume upload parsing with `pypdf` and `python-docx`
+- Structured resume output with:
   - `name`
   - `contact`
   - `summary`
@@ -25,7 +28,7 @@ The goal of CV Copilot is to turn unstructured resume and job description text i
   - `education`
   - `certifications`
   - `projects`
-- Structured job description parsing for:
+- Structured job description output with:
   - `company`
   - `title`
   - `required_skills`
@@ -34,18 +37,34 @@ The goal of CV Copilot is to turn unstructured resume and job description text i
   - `seniority`
   - `industry`
   - `keywords`
-- Explainable gap analysis with evidence-backed strengths and gaps
-- Rewrite suggestion generation with:
+- Explainable gap analysis output with:
+  - `match_score`
+  - `strengths`
+  - `gaps`
+  - `missing_keywords`
+  - `under_emphasized_experience`
+  - `evidence_notes`
+- Conservative rewrite suggestions with:
   - `tailored_summary`
-  - itemized `rewrite_suggestions`
-- Next.js + Tailwind frontend with:
-  - left-side resume upload and JD input
-  - right-side analysis display
-  - mock data flow while backend wiring is still pending
+  - `rewrite_suggestions`
+
+### Frontend
+
+- Next.js + Tailwind single-page interface
+- Left panel for:
+  - resume upload
+  - job description input
+  - analysis trigger
+- Right panel for:
+  - match score card
+  - strengths
+  - gaps
+  - missing keywords
+  - under-emphasized experience
+  - evidence notes
+- Product-style mock results aligned to the current `/analyze` response schema
 
 ## Architecture
-
-The repo is split into a Python backend and a separate frontend app:
 
 ```text
 CV_Copilot/
@@ -69,25 +88,32 @@ CV_Copilot/
 |       `-- resume_parser_service.py
 |-- frontend/
 |   |-- app/
+|   |   |-- globals.css
+|   |   |-- layout.js
+|   |   `-- page.js
 |   `-- lib/
+|       `-- mock-data.js
 |-- sample-data/
+|-- tests/
 |-- requirements.txt
 `-- README.md
 ```
 
 Backend flow:
 
-1. Resume upload is converted to plain text.
-2. Resume text is parsed into structured resume JSON.
-3. Job description text is parsed into structured job JSON.
-4. Gap analysis compares the two structured objects.
-5. Rewrite suggestions use parsed data plus gap analysis output.
+1. Upload a resume through `/parse-resume`.
+2. Extract and normalize resume text.
+3. Parse resume text into structured resume JSON.
+4. Parse job description text into structured JD JSON.
+5. Compare both objects in `/analyze`.
+6. Optionally generate rewrite guidance in `/rewrite-suggestions`.
 
 Frontend flow:
 
-1. User selects a resume and pastes a job description.
-2. The current UI uses mock analysis data for display.
-3. The page is already shaped for future API integration.
+1. Select a resume file and paste a job description.
+2. Click the analyze button.
+3. Review the structured results layout on the right.
+4. The current page uses mock analysis data until live API wiring is added.
 
 ## Local Setup
 
@@ -97,27 +123,27 @@ Frontend flow:
 - Node.js 18+
 - npm
 
-### Backend Setup
+### Backend
 
-Install Python dependencies:
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Start the FastAPI server:
+Run the FastAPI app:
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-The backend will be available at:
+Backend URLs:
 
 - API root: `http://127.0.0.1:8000`
 - Swagger docs: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
 
-### Frontend Setup
+### Frontend
 
 Install frontend dependencies:
 
@@ -132,17 +158,35 @@ Start the Next.js app:
 npm run dev
 ```
 
-The frontend will be available at:
+Frontend URL:
 
 - `http://localhost:3000`
+
+## Using the UI
+
+1. Open `http://localhost:3000`.
+2. Upload a PDF or DOCX resume in the left panel.
+3. Paste a target job description into the text area.
+4. Click `Analyze role fit`.
+5. Review the right-side results for:
+   - score
+   - strengths
+   - gaps
+   - missing keywords
+   - under-emphasized experience
+   - evidence notes
+
+Current UI behavior:
+
+- The interface is in mock mode for analysis results.
+- Resume upload currently stores the selected filename in the UI.
+- The displayed results are shaped to match the backend `/analyze` response.
 
 ## API Overview
 
 ### `GET /health`
 
 Simple health check endpoint.
-
-Response:
 
 ```json
 {
@@ -153,30 +197,39 @@ Response:
 
 ### `POST /parse-resume`
 
-Accepts a multipart form upload with:
+Accepts multipart form data:
 
 - `resume_file`: PDF or DOCX
 - `candidate_name`: optional text field
 
-Returns structured resume JSON including normalized text, extracted sections, and work experience items.
+Returns structured resume JSON including normalized text and extracted sections.
 
 ### `POST /parse-jd`
 
-Accepts raw job description text in JSON:
+Accepts:
 
 ```json
 {
-  "job_title": "Senior Backend Engineer",
-  "company_name": "Acme Health",
+  "job_title": "Customer Operations AI & Automation Lead",
+  "company_name": "Optro",
   "job_description_text": "Full job description text here"
 }
 ```
 
-Returns structured job description JSON with company, title, required skills, preferred skills, responsibilities, seniority, industry, and keywords.
+Returns:
+
+- `company`
+- `title`
+- `required_skills`
+- `preferred_skills`
+- `responsibilities`
+- `seniority`
+- `industry`
+- `keywords`
 
 ### `POST /analyze`
 
-Accepts structured resume and structured job description objects:
+Accepts:
 
 ```json
 {
@@ -219,30 +272,25 @@ Each rewrite suggestion contains:
 
 ## Sample Data
 
-Sample text files are included for quick local testing:
+Sample text files are included for quick testing:
 
 - [sample-data/sample-resume.txt](sample-data/sample-resume.txt)
 - [sample-data/sample-job-description.txt](sample-data/sample-job-description.txt)
 
-These are useful for:
-
-- parser development
-- API smoke tests
-- frontend demo flows
+They are useful for parser development, API smoke tests, and frontend demos.
 
 ## Future Improvements
 
-- Wire the frontend to the live FastAPI backend
-- Add persistent file storage or session-based analysis history
-- Improve parser coverage for more resume and JD formats
-- Add automated tests for parsing, scoring, and rewrite behavior
-- Introduce stronger validation and error messaging in the frontend
-- Support export flows for tailored summaries and rewrite suggestions
-- Add authentication and user workspaces
-- Replace mock frontend data with real upload and analysis requests
+- Wire the frontend directly to `/parse-resume`, `/parse-jd`, `/analyze`, and `/rewrite-suggestions`
+- Add loading, validation, and error states in the frontend
+- Replace mock frontend analysis with live backend data
+- Expand parser coverage for more resume and JD formats
+- Add broader automated tests for frontend and backend behavior
+- Support exporting tailored summaries and resume suggestions
+- Add authentication and saved analysis sessions
 
 ## Notes
 
-- The current frontend is intentionally using mock data first.
-- Parsing and rewrite suggestions are deterministic and conservative by design.
-- The rewrite service avoids inventing metrics, titles, projects, or achievements that are not already present in the resume.
+- The parsing and analysis services are deterministic and rule-based by design.
+- The gap analysis intentionally distinguishes between full gaps and under-emphasized but relevant experience.
+- The rewrite service does not invent metrics, titles, projects, or achievements that are not already supported by the resume.

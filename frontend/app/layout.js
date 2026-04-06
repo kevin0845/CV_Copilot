@@ -1,17 +1,4 @@
-import { Space_Grotesk, Source_Sans_3 } from "next/font/google";
-
 import "./globals.css";
-
-
-const displayFont = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-display"
-});
-
-const bodyFont = Source_Sans_3({
-  subsets: ["latin"],
-  variable: "--font-body"
-});
 
 
 export const metadata = {
@@ -23,7 +10,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={`${displayFont.variable} ${bodyFont.variable}`}>
+      <body>
         {children}
       </body>
     </html>
