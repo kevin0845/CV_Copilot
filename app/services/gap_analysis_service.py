@@ -354,6 +354,17 @@ def _analyze_seniority_alignment(
     job_seniority = job.seniority
     if not job_seniority:
         return {"applicable": False, "ratio": 0.0, "note": "", "strength": None, "gap": None}
+    if job_seniority not in SENIORITY_LEVELS:
+        return {
+            "applicable": False,
+            "ratio": 0.0,
+            "note": (
+                f"Seniority alignment skipped because the JD uses the explicit years requirement "
+                f"'{job_seniority}', which is not directly comparable to the resume's parsed titles."
+            ),
+            "strength": None,
+            "gap": None,
+        }
 
     resume_seniority, evidence = _extract_resume_seniority(resume.work_experience, resume.summary)
     if not resume_seniority:

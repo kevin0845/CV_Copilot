@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ResumeParseRequest(BaseModel):
@@ -59,6 +59,20 @@ class ResumeParseResponse(BaseModel):
 
 
 class JobDescriptionParseRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "job_title": "Customer Operations AI & Automation Lead",
+                "company_name": "Optro",
+                "job_description_text": (
+                    "This role will identify automation opportunities, design AI-enabled "
+                    "workflows, partner with frontline teams to eliminate manual work, "
+                    "and pilot third-party AI and automated workflow solutions."
+                ),
+            }
+        }
+    )
+
     job_title: str | None = Field(default=None, description="Role title from the job posting.")
     company_name: str | None = Field(default=None, description="Company name.")
     job_description_text: str = Field(

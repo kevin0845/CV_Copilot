@@ -1,10 +1,9 @@
 import re
-from collections import Counter
 
 from app.schemas.parse import JobDescriptionParseRequest, JobDescriptionParseResponse
 
 
-WORD_PATTERN = re.compile(r"\b[a-zA-Z][a-zA-Z0-9+\-#.]{1,}\b")
+WORD_PATTERN = re.compile(r"\b[a-zA-Z][a-zA-Z0-9-]{2,}\b")
 BULLET_PREFIX_PATTERN = re.compile(r"^(?:[-*]\s+|\d+\.\s+)")
 HEADING_CLEAN_PATTERN = re.compile(r"[^a-z]+")
 CHARACTER_TRANSLATION = str.maketrans(
@@ -14,26 +13,90 @@ CHARACTER_TRANSLATION = str.maketrans(
         "\u2014": "-",
     }
 )
+YEARS_EXPERIENCE_PATTERN = re.compile(
+    r"\b\d+\+?\s+years?(?:\s+of\s+experience)?\b",
+    re.IGNORECASE,
+)
+KNOWN_SKILLS = [
+    "SQL",
+    "Python",
+    "Workato",
+    "Zapier",
+    "Make",
+    "Salesforce",
+    "Gainsight",
+    "Zendesk",
+    "Snowflake",
+    "REST APIs",
+    "JSON",
+    "webhooks",
+    "LLM",
+    "ChatGPT",
+    "Gemini",
+]
+SKILL_PATTERNS = [
+    ("SQL", re.compile(r"\bsql\b", re.IGNORECASE)),
+    ("Python", re.compile(r"\bpython\b", re.IGNORECASE)),
+    ("Workato", re.compile(r"\bworkato\b", re.IGNORECASE)),
+    ("Zapier", re.compile(r"\bzapier\b", re.IGNORECASE)),
+    ("Make", re.compile(r"\bmake\b", re.IGNORECASE)),
+    ("Salesforce", re.compile(r"\bsalesforce\b", re.IGNORECASE)),
+    ("Gainsight", re.compile(r"\bgainsight\b", re.IGNORECASE)),
+    ("Zendesk", re.compile(r"\bzendesk\b", re.IGNORECASE)),
+    ("Snowflake", re.compile(r"\bsnowflake\b", re.IGNORECASE)),
+    ("REST APIs", re.compile(r"\brest api(?:s)?\b", re.IGNORECASE)),
+    ("JSON", re.compile(r"\bjson\b", re.IGNORECASE)),
+    ("webhooks", re.compile(r"\bwebhooks?\b", re.IGNORECASE)),
+    ("LLM", re.compile(r"\bllms?\b", re.IGNORECASE)),
+    ("ChatGPT", re.compile(r"\bchatgpt\b", re.IGNORECASE)),
+    ("Gemini", re.compile(r"\bgemini\b", re.IGNORECASE)),
+]
 STOP_WORDS = {
     "a",
     "an",
     "and",
     "are",
+    "as",
     "be",
-    "building",
+    "by",
     "for",
+    "from",
     "in",
+    "into",
     "is",
+    "it",
     "of",
     "on",
     "or",
     "our",
+    "role",
+    "that",
     "the",
+    "their",
+    "this",
     "to",
+    "using",
     "we",
+    "will",
     "with",
     "you",
     "your",
+}
+GENERIC_KEYWORD_EXCLUSIONS = {
+    "company",
+    "customers",
+    "experience",
+    "identify",
+    "include",
+    "manual",
+    "opportunities",
+    "partner",
+    "pilot",
+    "responsibilities",
+    "requirements",
+    "solutions",
+    "teams",
+    "work",
 }
 SECTION_ALIASES = {
     "requirements": "required_skills",
@@ -41,78 +104,79 @@ SECTION_ALIASES = {
     "minimumqualifications": "required_skills",
     "basicqualifications": "required_skills",
     "qualifications": "required_skills",
-    "whatareyoubring": "required_skills",
+    "musthave": "required_skills",
+    "musthaves": "required_skills",
+    "whatyoullbring": "required_skills",
+    "whatyouwillbring": "required_skills",
+    "preferred": "preferred_skills",
     "preferredskills": "preferred_skills",
     "preferredqualifications": "preferred_skills",
     "nicetohave": "preferred_skills",
+    "nicetohaves": "preferred_skills",
     "bonuspoints": "preferred_skills",
     "responsibilities": "responsibilities",
+    "keyresponsibilities": "responsibilities",
+    "roleoverview": "responsibilities",
     "whatyoulldo": "responsibilities",
     "whatyouwilldo": "responsibilities",
-    "roleoverview": "responsibilities",
     "duties": "responsibilities",
-    "keyresponsibilities": "responsibilities",
 }
-ROLE_HINTS = {
-    "engineer",
-    "developer",
-    "manager",
-    "analyst",
-    "consultant",
-    "specialist",
-    "architect",
-    "scientist",
-    "designer",
-    "coordinator",
-    "administrator",
-    "recruiter",
-    "marketer",
-    "accountant",
-    "director",
+PREFERRED_SIGNALS = (
+    "preferred",
+    "nice to have",
+    "nice-to-have",
+    "bonus",
+    "plus",
+)
+REQUIRED_SIGNALS = (
+    "requirements",
+    "required",
+    "must have",
+    "must-have",
+    "qualification",
+    "experience with",
+    "experience in",
+    "proficiency in",
+    "proficient in",
+    "knowledge of",
+    "familiarity with",
+)
+ACTION_LEAD_INS = (
+    "you will ",
+    "this role will ",
+    "the role will ",
+    "role will ",
+    "responsibilities include ",
+    "responsibility includes ",
+    "responsible for ",
+)
+ACTION_VERBS = {
+    "analyze",
+    "automate",
+    "build",
+    "collaborate",
+    "configure",
+    "create",
+    "define",
+    "deliver",
+    "design",
+    "develop",
+    "drive",
+    "eliminate",
+    "identify",
+    "implement",
+    "improve",
+    "integrate",
     "lead",
-    "intern",
-    "associate",
-    "officer",
+    "maintain",
+    "manage",
+    "monitor",
+    "optimize",
+    "own",
+    "partner",
+    "pilot",
+    "support",
 }
-SENIORITY_PATTERNS = [
-    ("intern", re.compile(r"\bintern(ship)?\b", re.IGNORECASE)),
-    ("junior", re.compile(r"\b(junior|jr\.?)\b", re.IGNORECASE)),
-    ("mid-level", re.compile(r"\b(mid|mid-level|intermediate)\b", re.IGNORECASE)),
-    ("senior", re.compile(r"\b(senior|sr\.?)\b", re.IGNORECASE)),
-    ("lead", re.compile(r"\blead\b", re.IGNORECASE)),
-    ("staff", re.compile(r"\bstaff\b", re.IGNORECASE)),
-    ("principal", re.compile(r"\bprincipal\b", re.IGNORECASE)),
-    ("manager", re.compile(r"\bmanager\b", re.IGNORECASE)),
-    ("director", re.compile(r"\bdirector\b", re.IGNORECASE)),
-    ("executive", re.compile(r"\b(vp|vice president|head|chief|executive)\b", re.IGNORECASE)),
-]
-INDUSTRY_TERMS = {
-    "technology": ("technology", "software", "saas"),
-    "fintech": ("fintech", "financial technology"),
-    "finance": ("finance", "financial services", "banking"),
-    "healthcare": ("healthcare", "health care", "medical"),
-    "healthtech": ("healthtech", "digital health"),
-    "education": ("education", "academic"),
-    "edtech": ("edtech",),
-    "retail": ("retail",),
-    "e-commerce": ("e-commerce", "ecommerce"),
-    "manufacturing": ("manufacturing",),
-    "logistics": ("logistics", "supply chain"),
-    "insurance": ("insurance", "insurtech"),
-    "government": ("government", "public sector"),
-    "cybersecurity": ("cybersecurity", "security"),
-    "telecommunications": ("telecommunications", "telecom"),
-    "media": ("media",),
-    "marketing": ("marketing", "advertising"),
-    "consulting": ("consulting",),
-    "biotech": ("biotech", "biotechnology"),
-    "nonprofit": ("nonprofit", "non-profit"),
-}
-SKILL_SIGNAL_PATTERNS = [
-    re.compile(r"(?i)(?:experience|expertise|proficiency|proficient|knowledge|familiarity)\s+(?:with|in)\s+(.+)$"),
-    re.compile(r"(?i)(?:understanding|command)\s+of\s+(.+)$"),
-    re.compile(r"(?i)(?:must have|should have|nice to have)\s+(.+)$"),
-]
 
 
 def parse_job_description(
@@ -120,26 +184,27 @@ def parse_job_description(
 ) -> JobDescriptionParseResponse:
     lines = _split_lines(payload.job_description_text)
     sections = _partition_sections(lines)
-    title = _extract_title(lines)
-    company = _extract_company(lines, title)
-    required_skills = _parse_skill_section(sections.get("required_skills", []))
-    preferred_skills = _parse_skill_section(sections.get("preferred_skills", []))
-    responsibilities = _parse_responsibilities(sections.get("responsibilities", []))
-    seniority = _extract_seniority(payload.job_description_text, title)
+    sentences = _split_sentences(payload.job_description_text)
+
+    required_lines = _collect_required_skill_lines(lines, sections, sentences)
+    preferred_lines = _collect_preferred_skill_lines(lines, sections, sentences)
+    responsibilities = _extract_responsibilities(sections, sentences)
+    required_skills = _extract_skills(required_lines)
+    preferred_skills = _extract_skills(preferred_lines)
+    seniority = _extract_seniority(payload.job_description_text)
     industry = _extract_industry(payload.job_description_text)
     keywords = _extract_keywords(
         payload.job_description_text,
+        responsibilities,
         required_skills,
         preferred_skills,
-        responsibilities,
-        title,
-        seniority,
-        industry,
+        payload.job_title,
+        payload.company_name,
     )
 
     return JobDescriptionParseResponse(
-        company=company,
-        title=title,
+        company=payload.company_name,
+        title=payload.job_title,
         required_skills=required_skills,
         preferred_skills=preferred_skills,
         responsibilities=responsibilities,
@@ -155,6 +220,12 @@ def _split_lines(text: str) -> list[str]:
         for line in text.splitlines()
         if line.strip()
     ]
+
+
+def _split_sentences(text: str) -> list[str]:
+    normalized_text = text.translate(CHARACTER_TRANSLATION).replace("\r", "\n")
+    raw_sentences = re.split(r"(?<=[.!?])\s+|\n+", normalized_text)
+    return [sentence.strip(" -\t") for sentence in raw_sentences if sentence.strip(" -\t")]
 
 
 def _partition_sections(lines: list[str]) -> dict[str, list[str]]:
@@ -179,168 +250,188 @@ def _canonical_section_name(line: str) -> str | None:
     return SECTION_ALIASES.get(cleaned)
 
 
-def _extract_title(lines: list[str]) -> str | None:
-    for line in lines[:8]:
-        lowered = line.lower()
-        if _canonical_section_name(line):
+def _collect_required_skill_lines(
+    lines: list[str],
+    sections: dict[str, list[str]],
+    sentences: list[str],
+) -> list[str]:
+    skill_lines = list(sections.get("required_skills", []))
+    if skill_lines:
+        return _dedupe_preserve_order(skill_lines)
+
+    for sentence in sentences:
+        if _is_preferred_signal_line(sentence):
             continue
-        if lowered.startswith(("company:", "about us", "location:", "team:")):
-            continue
-        if len(line.split()) > 10:
-            continue
-        if any(hint in lowered.split() for hint in ROLE_HINTS):
-            return line
-    return None
+        if _is_required_signal_line(sentence):
+            skill_lines.append(sentence)
+
+    return _dedupe_preserve_order(skill_lines)
 
 
-def _extract_company(lines: list[str], title: str | None) -> str | None:
-    for line in lines[:12]:
-        lowered = line.lower()
-        if lowered.startswith("company:"):
-            value = line.split(":", 1)[1].strip()
-            return value or None
+def _collect_preferred_skill_lines(
+    lines: list[str],
+    sections: dict[str, list[str]],
+    sentences: list[str],
+) -> list[str]:
+    skill_lines = list(sections.get("preferred_skills", []))
+    if skill_lines:
+        return _dedupe_preserve_order(skill_lines)
 
-    for line in lines[:12]:
-        match = re.match(r"(?i)about\s+([A-Z][A-Za-z0-9&.,' -]+)$", line)
-        if match:
-            return match.group(1).strip()
+    for sentence in sentences:
+        if _is_preferred_signal_line(sentence):
+            skill_lines.append(sentence)
 
-    if title:
-        for index, line in enumerate(lines[:8]):
-            if line == title:
-                if index + 1 < len(lines):
-                    candidate = lines[index + 1]
-                    if _looks_like_company(candidate):
-                        return candidate
-                if index > 0:
-                    candidate = lines[index - 1]
-                    if _looks_like_company(candidate):
-                        return candidate
-    return None
+    return _dedupe_preserve_order(skill_lines)
 
 
-def _parse_skill_section(lines: list[str]) -> list[str]:
-    skills: list[str] = []
+def _extract_skills(lines: list[str]) -> list[str]:
+    matches: list[str] = []
     for line in lines:
         cleaned = _clean_bullet(line)
-        skills.extend(_extract_skill_candidates(cleaned))
-    return _dedupe_preserve_order(skills)
+        line_matches: list[tuple[int, str]] = []
+        for skill_name, pattern in SKILL_PATTERNS:
+            match = pattern.search(cleaned)
+            if match:
+                line_matches.append((match.start(), skill_name))
+        for _, skill_name in sorted(line_matches, key=lambda item: item[0]):
+            matches.append(skill_name)
+    return _dedupe_preserve_order(matches)
 
 
-def _parse_responsibilities(lines: list[str]) -> list[str]:
+def _extract_responsibilities(
+    sections: dict[str, list[str]],
+    sentences: list[str],
+) -> list[str]:
+    section_lines = sections.get("responsibilities", [])
+    if section_lines:
+        responsibilities = _extract_responsibilities_from_lines(section_lines)
+        if responsibilities:
+            return responsibilities
+
+    return _extract_responsibilities_from_sentences(sentences)
+
+
+def _extract_responsibilities_from_lines(lines: list[str]) -> list[str]:
     responsibilities: list[str] = []
     for line in lines:
         cleaned = _clean_bullet(line)
-        if cleaned:
-            responsibilities.append(cleaned)
-    return responsibilities
+        clauses = _extract_action_clauses(cleaned)
+        if clauses:
+            responsibilities.extend(clauses)
+        elif _looks_like_action_statement(cleaned):
+            responsibilities.append(_format_responsibility(cleaned))
+    return _dedupe_preserve_order(responsibilities)
 
 
-def _extract_skill_candidates(line: str) -> list[str]:
-    if not line:
-        return []
+def _extract_responsibilities_from_sentences(sentences: list[str]) -> list[str]:
+    responsibilities: list[str] = []
+    for sentence in sentences:
+        clauses = _extract_action_clauses(sentence)
+        if clauses:
+            responsibilities.extend(clauses)
+    return _dedupe_preserve_order(responsibilities)
 
-    working_line = line
-    if ":" in working_line and len(working_line.split(":", 1)[0].split()) <= 3:
-        working_line = working_line.split(":", 1)[1].strip()
 
-    for pattern in SKILL_SIGNAL_PATTERNS:
-        match = pattern.search(working_line)
-        if match:
-            working_line = match.group(1).strip().rstrip(".")
+def _extract_action_clauses(text: str) -> list[str]:
+    normalized = text.strip()
+    lowered = normalized.lower()
+    clause_source = None
+
+    for lead_in in ACTION_LEAD_INS:
+        if lead_in in lowered:
+            start_index = lowered.index(lead_in) + len(lead_in)
+            clause_source = normalized[start_index:]
             break
 
-    if len(working_line.split()) <= 1:
-        return [working_line] if working_line else []
+    if clause_source is None and _looks_like_action_statement(normalized):
+        clause_source = normalized
 
-    if any(separator in working_line for separator in ("|", ",", ";", "/")):
-        parts = re.split(r"[|,;/]+", working_line)
-        return [part.strip().rstrip(".") for part in parts if part.strip()]
+    if clause_source is None:
+        return []
 
-    if " and " in working_line and len(working_line.split()) <= 12:
-        parts = working_line.split(" and ")
-        return [part.strip().rstrip(".") for part in parts if part.strip()]
+    clause_source = clause_source.strip(" :.-")
+    if not clause_source:
+        return []
 
-    return [working_line.rstrip(".")] if len(working_line.split()) <= 8 else []
+    raw_clauses = re.split(r",\s+and\s+|,\s+", clause_source)
+    clauses = [
+        _format_responsibility(clause)
+        for clause in raw_clauses
+        if _looks_like_action_statement(clause)
+    ]
+    return _dedupe_preserve_order(clauses)
 
 
-def _extract_seniority(text: str, title: str | None) -> str | None:
-    search_space = f"{title or ''}\n{text}"
-    for label, pattern in SENIORITY_PATTERNS:
-        if pattern.search(search_space):
-            return label
-    return None
+def _looks_like_action_statement(text: str) -> bool:
+    words = _normalize_words(text)
+    return bool(words and words[0] in ACTION_VERBS)
+
+
+def _extract_seniority(text: str) -> str | None:
+    match = YEARS_EXPERIENCE_PATTERN.search(text)
+    return match.group(0) if match else None
 
 
 def _extract_industry(text: str) -> str | None:
-    lowered = text.lower()
-    for label, aliases in INDUSTRY_TERMS.items():
-        for alias in aliases:
-            if alias in lowered:
-                return label
-    return None
+    return "SaaS" if re.search(r"\bsaas\b", text, re.IGNORECASE) else None
 
 
 def _extract_keywords(
     text: str,
+    responsibilities: list[str],
     required_skills: list[str],
     preferred_skills: list[str],
-    responsibilities: list[str],
-    title: str | None,
-    seniority: str | None,
-    industry: str | None,
-    limit: int = 12,
+    job_title: str | None,
+    company_name: str | None,
+    limit: int = 8,
 ) -> list[str]:
-    explicit_keywords = _dedupe_preserve_order(
-        required_skills
-        + preferred_skills
-        + _extract_keywords_from_title(title)
-        + ([seniority] if seniority else [])
-        + ([industry] if industry else [])
-    )
-
-    if len(explicit_keywords) >= limit:
-        return explicit_keywords[:limit]
-
-    token_counts = Counter(
+    excluded_terms = {
         token.lower()
-        for token in WORD_PATTERN.findall(text)
-        if token.lower() not in STOP_WORDS and len(token) > 2
-    )
-    fallback_tokens = [
-        token
-        for token, _ in token_counts.most_common(limit)
-        if token.lower() not in {keyword.lower() for keyword in explicit_keywords}
-        and token.lower() not in {"responsibilities", "requirements", "qualifications"}
-    ]
+        for token in _normalize_words(" ".join(required_skills + preferred_skills))
+    }
+    excluded_terms.update(token.lower() for token in _normalize_words(company_name or ""))
+    excluded_terms.update(skill.lower() for skill in KNOWN_SKILLS)
 
-    return (explicit_keywords + fallback_tokens)[:limit]
+    source_text = " ".join(responsibilities) if responsibilities else text
+    tokens = WORD_PATTERN.findall(source_text.translate(CHARACTER_TRANSLATION))
+    keywords: list[str] = []
+
+    for token in tokens:
+        lowered = token.lower()
+        if lowered in STOP_WORDS or lowered in GENERIC_KEYWORD_EXCLUSIONS:
+            continue
+        if lowered in excluded_terms:
+            continue
+        if lowered in ACTION_VERBS:
+            continue
+        keywords.append(token)
+
+    return _dedupe_preserve_order(keywords)[:limit]
 
 
-def _extract_keywords_from_title(title: str | None) -> list[str]:
-    if not title:
-        return []
-    return [
-        token
-        for token in re.split(r"\s+", title)
-        if token and token.lower() not in STOP_WORDS
-    ]
+def _is_required_signal_line(text: str) -> bool:
+    lowered = text.lower()
+    return any(signal in lowered for signal in REQUIRED_SIGNALS)
 
 
-def _looks_like_company(value: str) -> bool:
-    if _canonical_section_name(value):
-        return False
-    if len(value.split()) > 8:
-        return False
-    if any(character.isdigit() for character in value):
-        return False
-    if any(hint in value.lower().split() for hint in ROLE_HINTS):
-        return False
-    return any(token[:1].isupper() for token in value.split())
+def _is_preferred_signal_line(text: str) -> bool:
+    lowered = text.lower()
+    return any(signal in lowered for signal in PREFERRED_SIGNALS)
 
 
 def _clean_bullet(line: str) -> str:
-    return BULLET_PREFIX_PATTERN.sub("", line).strip()
+    return BULLET_PREFIX_PATTERN.sub("", line).strip().rstrip(".")
+
+
+def _format_responsibility(text: str) -> str:
+    cleaned = _clean_bullet(text)
+    if not cleaned:
+        return ""
+    return cleaned[0].upper() + cleaned[1:]
+
+
+def _normalize_words(text: str) -> list[str]:
+    return re.findall(r"[a-zA-Z][a-zA-Z-]*", text.lower())
 
 
 def _dedupe_preserve_order(items: list[str]) -> list[str]:
