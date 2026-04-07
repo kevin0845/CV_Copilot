@@ -119,6 +119,55 @@ class GapAnalysisServiceTests(unittest.TestCase):
         self.assertFalse(any("does not explicitly mention SaaS-related work" in gap for gap in result.gaps))
         self.assertTrue(any("adjacent business-software evidence" in note for note in result.evidence_notes))
 
+    def test_long_summary_evidence_is_compacted_in_strengths(self) -> None:
+        long_summary = (
+            "EXPERIENCE Apex Fintech Solutions Austin TX Automation Engineer January 2022 - Present "
+            "● Design, develop, and maintain scalable automated ETL pipelines and a centralized data model "
+            "● Develop and implement an internal AI-powered tool leveraging Claude to generate optimized SQL queries for analysts "
+            "● Automate manual processes with Python scripts and reduce ingestion errors "
+            "Business Operations Analyst June 2018 - April 2019 "
+            "● Engineered SQL scripts to validate mass cost basis data for UAT before quarterly releases "
+            "EDUCATION University of Pennsylvania Master of Computer and Information Technology "
+            "SKILLS Python, Java, Bash, C, SQL, Visual Basic"
+        )
+        resume = ResumeParseResponse(
+            source_filename=None,
+            normalized_text=long_summary,
+            name="Candidate",
+            contact=None,
+            summary=long_summary,
+            skills=[],
+            work_experience=[],
+            education=[],
+            certifications=[],
+            projects=[],
+        )
+        job = JobDescriptionParseResponse(
+            company="The MLC",
+            title="SQL Engineer / Data Analyst",
+            required_skills=["SQL"],
+            preferred_skills=[],
+            responsibilities=[
+                "Develop and implement optimized SQL queries for analysts",
+                "Partner with stakeholders to reduce manual work",
+            ],
+            seniority=None,
+            industry=None,
+            keywords=[],
+        )
+
+        result = analyze_gap(resume, job)
+
+        self.assertTrue(result.strengths)
+        self.assertTrue(all(len(strength) <= 260 for strength in result.strengths))
+        self.assertTrue(
+            any("Required Skill match: SQL" in strength for strength in result.strengths)
+        )
+        self.assertFalse(
+            any("Business Operations Analyst June 2018" in strength for strength in result.strengths)
+        )
+        self.assertTrue(all(len(item) <= 320 for item in result.under_emphasized_experience))
+
 
 if __name__ == "__main__":
     unittest.main()

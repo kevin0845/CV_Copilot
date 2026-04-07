@@ -97,6 +97,27 @@ class JobDescriptionParserTests(unittest.TestCase):
             ["Automate workflows and support Salesforce operations"],
         )
 
+    def test_keeps_section_responsibility_lines_as_complete_bullets(self) -> None:
+        payload = JobDescriptionParseRequest(
+            job_title="SQL Engineer / Data Analyst",
+            company_name="The MLC",
+            job_description_text=(
+                "Essential Responsibilities\n"
+                "Design, develop, and maintain complex SQL queries, stored procedures, and views to support business operations and reporting\n"
+                "Optimize database performance through query tuning, indexing strategies, and execution plan analysis"
+            ),
+        )
+
+        result = parse_job_description(payload)
+
+        self.assertEqual(
+            result.responsibilities,
+            [
+                "Design, develop, and maintain complex SQL queries, stored procedures, and views to support business operations and reporting",
+                "Optimize database performance through query tuning, indexing strategies, and execution plan analysis",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -142,6 +142,9 @@ ADJACENT_DOMAIN_CONCEPTS = {
     "SaaS": {"business_software", "automation", "workflow"},
     "technology": {"business_software", "automation", "workflow"},
 }
+LONG_EVIDENCE_THRESHOLD = 450
+EVIDENCE_SNIPPET_LIMIT = 180
+SUMMARY_EVIDENCE_LIMIT = 40
 
 
 @dataclass
@@ -280,7 +283,7 @@ def _build_resume_evidence(resume: ResumeParseResponse) -> list[ResumeEvidence]:
     evidence: list[ResumeEvidence] = []
 
     if resume.summary:
-        evidence.append(ResumeEvidence(label="resume summary", text=resume.summary))
+        evidence.extend(_build_summary_evidence(resume.summary))
 
     for skill in resume.skills:
         evidence.append(ResumeEvidence(label="resume skill", text=skill))
@@ -325,6 +328,42 @@ def _build_resume_evidence(resume: ResumeParseResponse) -> list[ResumeEvidence]:
             evidence.append(ResumeEvidence(label="education detail", text=detail))
 
     return evidence
+
+
+def _build_summary_evidence(summary: str) -> list[ResumeEvidence]:
+    if len(summary) <= LONG_EVIDENCE_THRESHOLD:
+        return [ResumeEvidence(label="resume summary", text=summary)]
+
+    snippets = _split_evidence_snippets(summary)
+    if snippets:
+        return [
+            ResumeEvidence(label="resume summary excerpt", text=snippet)
+            for snippet in snippets[:SUMMARY_EVIDENCE_LIMIT]
+        ]
+
+    return [
+        ResumeEvidence(
+            label="resume summary excerpt",
+            text=_compact_evidence_text(summary),
+        )
+    ]
+
+
+def _split_evidence_snippets(text: str) -> list[str]:
+    pieces = re.split(r"\s*[•●]\s*|\n+", text)
+    if len(pieces) <= 1:
+        pieces = re.split(r"(?<=[.!?])\s+", text)
+
+    snippets: list[str] = []
+    for piece in pieces:
+        cleaned = piece.strip(" -•●\t")
+        if not cleaned:
+            continue
+        if len(cleaned.split()) < 4:
+            continue
+        snippets.append(_compact_evidence_text(cleaned))
+
+    return _dedupe_preserve_order(snippets)
 
 
 def _match_terms(
@@ -630,11 +669,13 @@ def _format_under_emphasized_experience(
     notes: list[str] = []
 
     for match in matches[:limit]:
+        evidence = _compact_evidence_text(match.evidence, match.target)
+        target = _compact_target_text(match.target)
         concept_text = ""
         if match.matched_concepts:
             concept_text = " through related concepts such as " + ", ".join(match.matched_concepts)
         notes.append(
-            f"Resume evidence '{match.evidence}' in {match.label} is relevant to JD responsibility '{match.target}'{concept_text}, but the resume could state that connection more directly."
+            f"Under-emphasized experience: {evidence} supports '{target}'{concept_text}, but the resume could state that connection more directly."
         )
 
     return notes
@@ -646,7 +687,7 @@ def _format_skill_strengths(
     limit: int,
 ) -> list[str]:
     return [
-        f"Resume matches the JD {skill_type} '{item.target}' through {item.label}: '{item.evidence}'."
+        f"{skill_type.title()} match: {item.target} ({item.label}: {_compact_evidence_text(item.evidence, item.target)})."
         for item in matched[:limit]
     ]
 
@@ -667,7 +708,7 @@ def _format_responsibility_strengths(
     limit: int,
 ) -> list[str]:
     return [
-        f"Resume evidence '{item.evidence}' in {item.label} directly supports the JD responsibility '{item.target}'."
+        f"Responsibility match: {_compact_evidence_text(item.evidence, item.target)} supports '{_compact_target_text(item.target)}'."
         for item in matches[:limit]
     ]
 
@@ -680,6 +721,48 @@ def _format_responsibility_gaps(
         f"The resume does not show clear evidence for the JD responsibility '{responsibility}'."
         for responsibility in responsibilities[:limit]
     ]
+
+
+def _compact_evidence_text(
+    text: str,
+    target: str | None = None,
+    max_chars: int = EVIDENCE_SNIPPET_LIMIT,
+) -> str:
+    cleaned = re.sub(r"\s+", " ", text).strip(" '\"")
+    if not cleaned:
+        return ""
+
+    target_tokens = _meaningful_tokens(target or "")
+    candidates = [
+        candidate.strip(" -•●\t")
+        for candidate in re.split(r"\s*[•●]\s*|(?<=[.!?])\s+", cleaned)
+        if candidate.strip(" -•●\t")
+    ]
+
+    if candidates and target_tokens:
+        best_candidate = max(
+            candidates,
+            key=lambda candidate: len(target_tokens & _meaningful_tokens(candidate)),
+        )
+        if target_tokens & _meaningful_tokens(best_candidate):
+            cleaned = best_candidate
+    elif candidates and len(cleaned) > max_chars:
+        cleaned = candidates[0]
+
+    if len(cleaned) <= max_chars:
+        return cleaned
+
+    return cleaned[: max_chars - 3].rstrip(" ,;:-") + "..."
+
+
+def _compact_target_text(
+    text: str,
+    max_chars: int = 120,
+) -> str:
+    cleaned = re.sub(r"\s+", " ", text).strip()
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return cleaned[: max_chars - 3].rstrip(" ,;:-") + "..."
 
 
 def _find_adjacent_domain_evidence(
@@ -725,9 +808,11 @@ def _extract_concepts(text: str) -> set[str]:
             phrase_tokens = set(normalized_phrase.split())
             if not phrase_tokens:
                 continue
-            if len(phrase_tokens) == 1 and next(iter(phrase_tokens)) in tokens:
-                concepts.add(concept)
-                break
+            if len(phrase_tokens) == 1:
+                if next(iter(phrase_tokens)) in tokens:
+                    concepts.add(concept)
+                    break
+                continue
             if normalized_phrase in normalized:
                 concepts.add(concept)
                 break

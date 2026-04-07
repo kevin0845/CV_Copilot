@@ -115,6 +115,7 @@ SECTION_ALIASES = {
     "nicetohaves": "preferred_skills",
     "bonuspoints": "preferred_skills",
     "responsibilities": "responsibilities",
+    "essentialresponsibilities": "responsibilities",
     "keyresponsibilities": "responsibilities",
     "roleoverview": "responsibilities",
     "whatyoulldo": "responsibilities",
@@ -315,11 +316,13 @@ def _extract_responsibilities_from_lines(lines: list[str]) -> list[str]:
     responsibilities: list[str] = []
     for line in lines:
         cleaned = _clean_bullet(line)
+        if _looks_like_action_statement(cleaned):
+            responsibilities.append(_format_responsibility(cleaned))
+            continue
+
         clauses = _extract_action_clauses(cleaned)
         if clauses:
             responsibilities.extend(clauses)
-        elif _looks_like_action_statement(cleaned):
-            responsibilities.append(_format_responsibility(cleaned))
     return _dedupe_preserve_order(responsibilities)
 
 
