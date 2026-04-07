@@ -87,6 +87,63 @@ function InsightList({ items, tone = "neutral", emptyLabel }) {
 }
 
 
+const parseHiddenRelevanceItem = (item) => {
+  const [hiddenPart, suggestedPart] = item.split("|| Suggested bullet:");
+  const hidden = hiddenPart
+    .replace(/^Hidden relevance:\s*/i, "")
+    .replace(/^Evidence:\s*/i, "")
+    .trim();
+
+  return {
+    hidden: hidden || item,
+    suggested: suggestedPart?.trim() || ""
+  };
+};
+
+
+function HiddenRelevanceList({ items }) {
+  if (!items.length) {
+    return (
+      <div className="rounded-[24px] border border-dashed border-[color:var(--border)] bg-white/70 px-4 py-5 text-sm leading-6 text-[color:var(--muted)]">
+        No hidden relevance was identified.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {items.map((item) => {
+        const parsedItem = parseHiddenRelevanceItem(item);
+
+        return (
+          <article
+            key={item}
+            className="overflow-hidden rounded-[26px] border border-[color:var(--hidden-border)] bg-white/82 shadow-sm"
+          >
+            <div className="bg-[color:var(--hidden-soft)] px-4 py-4">
+              <p className="text-sm leading-6 text-[color:var(--foreground)]">
+                {parsedItem.hidden}
+              </p>
+            </div>
+
+            {parsedItem.suggested ? (
+              <div className="border-t-2 border-[color:var(--suggestion-border)] bg-[color:var(--suggestion-soft)] px-4 py-4 shadow-[inset_5px_0_0_var(--suggestion)]">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--suggestion)]">
+                  Suggested revised bullet
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-[color:var(--foreground)]">
+                  {parsedItem.suggested}
+                </p>
+              </div>
+            ) : null}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+
 function KeywordGrid({ items }) {
   if (!items.length) {
     return (
@@ -417,11 +474,8 @@ export default function HomePage() {
                 <KeywordGrid items={results.missing_keywords} />
               </SectionCard>
 
-              <SectionCard eyebrow="Hidden relevance" title="Under-emphasized experience">
-                <InsightList
-                  items={results.under_emphasized_experience}
-                  emptyLabel="No under-emphasized experience was identified."
-                />
+              <SectionCard eyebrow="Suggested bullet improvements" title="Hidden relevance">
+                <HiddenRelevanceList items={results.under_emphasized_experience} />
               </SectionCard>
             </div>
 

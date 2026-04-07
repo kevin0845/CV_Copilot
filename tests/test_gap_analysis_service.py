@@ -42,6 +42,8 @@ class GapAnalysisServiceTests(unittest.TestCase):
         self.assertEqual(len(result.under_emphasized_experience), 1)
         self.assertIn("Automated manual business processes for operations teams", result.under_emphasized_experience[0])
         self.assertIn("Partner with frontline teams to eliminate manual work", result.under_emphasized_experience[0])
+        self.assertIn("Suggested bullet:", result.under_emphasized_experience[0])
+        self.assertIn("automation and manual-work reduction", result.under_emphasized_experience[0])
         self.assertTrue(any("partially supported" in note for note in result.evidence_notes))
 
     def test_ai_workflow_responsibility_gets_partial_credit_not_full_gap(self) -> None:
@@ -80,7 +82,8 @@ class GapAnalysisServiceTests(unittest.TestCase):
         self.assertEqual(result.gaps, [])
         self.assertEqual(len(result.under_emphasized_experience), 1)
         self.assertIn("Developed an internal AI tool for support workflows", result.under_emphasized_experience[0])
-        self.assertTrue(any("related concepts" in item for item in result.under_emphasized_experience))
+        self.assertIn("Suggested bullet:", result.under_emphasized_experience[0])
+        self.assertTrue(any("AI-enabled workflow experience" in item for item in result.under_emphasized_experience))
 
     def test_adjacent_saas_domain_evidence_is_reported_conservatively(self) -> None:
         resume = ResumeParseResponse(
@@ -167,6 +170,46 @@ class GapAnalysisServiceTests(unittest.TestCase):
             any("Business Operations Analyst June 2018" in strength for strength in result.strengths)
         )
         self.assertTrue(all(len(item) <= 320 for item in result.under_emphasized_experience))
+        self.assertTrue(
+            all("Suggested bullet:" in item for item in result.under_emphasized_experience)
+        )
+
+    def test_work_titles_are_not_used_for_hidden_relevance_suggestions(self) -> None:
+        resume = ResumeParseResponse(
+            source_filename=None,
+            normalized_text="sample",
+            name="Candidate",
+            contact=None,
+            summary=None,
+            skills=[],
+            work_experience=[
+                WorkExperienceItem(
+                    company="Acme",
+                    title="Team Lead",
+                    date_range="2020 - 2022",
+                    bullets=[],
+                )
+            ],
+            education=[],
+            certifications=[],
+            projects=[],
+        )
+        job = JobDescriptionParseResponse(
+            company="The MLC",
+            title="SQL Engineer / Data Analyst",
+            required_skills=[],
+            preferred_skills=[],
+            responsibilities=["Lead cross-functional analytics work"],
+            seniority=None,
+            industry=None,
+            keywords=[],
+        )
+
+        result = analyze_gap(resume, job)
+
+        self.assertEqual(result.under_emphasized_experience, [])
+        self.assertFalse(any("Team Lead" in strength for strength in result.strengths))
+        self.assertTrue(any("Lead cross-functional analytics work" in gap for gap in result.gaps))
 
 
 if __name__ == "__main__":

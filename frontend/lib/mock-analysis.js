@@ -556,9 +556,20 @@ const buildUnderEmphasized = (partialResponsibilities) =>
     const conceptText = relatedConcepts.length
       ? ` through ${formatList(relatedConcepts)}`
       : "";
+    const suggestion = buildHiddenRelevanceSuggestion(match, relatedConcepts);
 
-    return `Resume evidence '${match.evidence}' is relevant to '${match.responsibility}'${conceptText}, but the experience could be stated more directly for this role.`;
+    return `${match.evidence} supports '${match.responsibility}'${conceptText}. || Suggested bullet: ${suggestion}`;
   });
+
+const buildHiddenRelevanceSuggestion = (match, relatedConcepts) => {
+  const base = match.evidence.replace(/[.]+$/g, "");
+
+  if (relatedConcepts.length) {
+    return `${base} to emphasize ${formatList(relatedConcepts.slice(0, 2))}.`;
+  }
+
+  return `${base}; clarify how this supports ${match.responsibility.toLowerCase()}.`;
+};
 
 const buildEvidenceNotes = ({
   resumeFileName,

@@ -445,6 +445,8 @@ def _find_responsibility_evidence(
 ) -> MatchEvidence | None:
     best_match: MatchEvidence | None = None
     for evidence in evidence_items:
+        if not _is_rewritable_responsibility_evidence(evidence):
+            continue
         candidate = _score_responsibility_match(responsibility, evidence)
         if candidate is None:
             continue
@@ -452,6 +454,10 @@ def _find_responsibility_evidence(
             best_match = candidate
 
     return best_match
+
+
+def _is_rewritable_responsibility_evidence(evidence: ResumeEvidence) -> bool:
+    return not evidence.label.startswith("work title")
 
 
 def _score_responsibility_match(
@@ -669,16 +675,46 @@ def _format_under_emphasized_experience(
     notes: list[str] = []
 
     for match in matches[:limit]:
-        evidence = _compact_evidence_text(match.evidence, match.target)
-        target = _compact_target_text(match.target)
-        concept_text = ""
-        if match.matched_concepts:
-            concept_text = " through related concepts such as " + ", ".join(match.matched_concepts)
+        evidence = _compact_evidence_text(match.evidence, match.target, max_chars=80)
+        target = _compact_target_text(match.target, max_chars=70)
+        suggested_bullet = _build_under_emphasized_suggestion(match, evidence)
         notes.append(
-            f"Under-emphasized experience: {evidence} supports '{target}'{concept_text}, but the resume could state that connection more directly."
+            f"{evidence} supports '{target}'. || Suggested bullet: {suggested_bullet}"
         )
 
     return notes
+
+
+def _build_under_emphasized_suggestion(
+    match: MatchEvidence,
+    evidence: str,
+) -> str:
+    base = _compact_evidence_text(evidence, match.target, max_chars=70).rstrip(" .")
+    target = _compact_target_text(match.target, max_chars=90).rstrip(" .").lower()
+    additions = _suggestion_additions(match.matched_concepts)
+
+    if additions:
+        return f"{base} to emphasize {', '.join(additions)}."
+
+    return f"{base}; clarify how this supports {target}."
+
+
+def _suggestion_additions(concepts: tuple[str, ...]) -> list[str]:
+    concept_additions = {
+        "automation": "automation and manual-work reduction",
+        "workflow": "workflow and process improvement",
+        "ai": "AI-enabled workflow experience",
+        "cross_functional": "cross-functional partnership",
+        "business_software": "business-software systems experience",
+    }
+    additions: list[str] = []
+
+    for concept in concepts:
+        addition = concept_additions.get(concept)
+        if addition and addition not in additions:
+            additions.append(addition)
+
+    return additions[:2]
 
 
 def _format_skill_strengths(

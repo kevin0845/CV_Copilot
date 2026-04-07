@@ -14,6 +14,12 @@
   --support: #0f9b6c;
   --danger: #c2410c;
   --danger-soft: rgba(194, 65, 12, 0.12);
+  --hidden: #a16207;
+  --hidden-soft: rgba(250, 204, 21, 0.14);
+  --hidden-border: rgba(161, 98, 7, 0.2);
+  --suggestion: #047857;
+  --suggestion-soft: rgba(16, 185, 129, 0.24);
+  --suggestion-border: rgba(4, 120, 87, 0.28);
   --shadow: 0 28px 100px rgba(23, 32, 51, 0.12);
   --font-body: "Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-display: "Aptos Display", "Trebuchet MS", "Segoe UI Semibold", sans-serif;
